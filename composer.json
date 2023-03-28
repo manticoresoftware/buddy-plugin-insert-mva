@@ -1,11 +1,11 @@
 {
-	"name": "manticoresoftware/buddy-plugin-template",
-	"description": "The Buddy template handler plugin",
+	"name": "manticoresoftware/buddy-plugin-insert-mva",
+	"description": "The Buddy to support insert MVA as a string for mysqldump",
 	"type": "library",
 	"license": "GPL-2.0-or-later",
 	"autoload": {
 		"psr-4": {
-			"Manticoresearch\\Buddy\\Plugin\\Template\\": "src/"
+			"Manticoresearch\\Buddy\\Plugin\\InsertMva\\": "src/"
 		}
 	},
 	"authors": [

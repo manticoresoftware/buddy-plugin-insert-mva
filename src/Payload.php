@@ -8,8 +8,9 @@
   version. You should have received a copy of the GPL license along with this
   program; if you did not, you can find it at http://www.gnu.org/
 */
-namespace Manticoresearch\Buddy\Plugin\Template;
+namespace Manticoresearch\Buddy\Plugin\InsertMva;
 
+use Manticoresearch\Buddy\Core\Error\QueryParseError;
 use Manticoresearch\Buddy\Core\Network\Request;
 use Manticoresearch\Buddy\Core\Plugin\BasePayload;
 
@@ -18,6 +19,13 @@ use Manticoresearch\Buddy\Core\Plugin\BasePayload;
  * which can be as a result of only comments in it that we strip
  */
 final class Payload extends BasePayload {
+	/** @var string $table */
+	public string $table;
+
+	/** @var array<string|int> $values */
+	public array $values;
+
+	/** @var string $path */
 	public string $path;
 
   /**
@@ -26,8 +34,27 @@ final class Payload extends BasePayload {
 	 */
 	public static function fromRequest(Request $request): static {
 		$self = new static();
-		// TODO: add logic of parsing request into payload here
-		// We just need to do something, but actually its' just for PHPstan
+		$self->path = $request->path;
+		preg_match('/^insert\s+into\s+`?([^ ]+?)`?\s+values/ius', $request->payload, $matches);
+		$table = $matches[1] ?? null;
+		if (!$table) {
+			throw QueryParseError::create('Failed to parse table from the query');
+		}
+		$self->table = $table;
+
+		// It's time to parse values
+		$pattern = '/values\s*\((.*)\)/ius';
+		preg_match($pattern, $request->payload, $matches);
+
+		if (!isset($matches[1])) {
+			throw QueryParseError::create('Failed to parse values from the query');
+		}
+
+		$values = $matches[1];
+		$pattern = "/'(?:\\\\.|[^\\\\'])*'|\d+/i";
+		preg_match_all($pattern, $values, $matches);
+
+		$self->values = array_map(trim(...), $matches[0] ?? []);
 		$self->path = $request->path;
 		return $self;
 	}
@@ -37,7 +64,10 @@ final class Payload extends BasePayload {
 	 * @return bool
 	 */
 	public static function hasMatch(Request $request): bool {
-		// TODO: validate $request->payload and return true, if your plugin should handle it
-		return $request->payload === 'template';
+		$isInsertQuery = stripos($request->payload, 'insert into') === 0;
+		// ERROR 1064 (42000): row 1, column 3: non-MVA value specified for a MVA column
+		$isMVAError = str_contains($request->error, 'non-MVA value specified for a MVA column');
+
+		return $isInsertQuery && $isMVAError;
 	}
 }

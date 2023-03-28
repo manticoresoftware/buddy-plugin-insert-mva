@@ -8,15 +8,16 @@
   version. You should have received a copy of the GPL license along with this
   program; if you did not, you can find it at http://www.gnu.org/
 */
-namespace Manticoresearch\Buddy\Plugin\Template;
+namespace Manticoresearch\Buddy\Plugin\InsertMva;
 
-use Manticoresearch\Buddy\Core\Plugin\BaseHandler;
+use Manticoresearch\Buddy\Core\ManticoreSearch\Client;
+use Manticoresearch\Buddy\Core\Plugin\BaseHandlerWithClient;
 use Manticoresearch\Buddy\Core\Task\Task;
 use Manticoresearch\Buddy\Core\Task\TaskResult;
 use RuntimeException;
 use parallel\Runtime;
 
-final class Handler extends BaseHandler {
+final class Handler extends BaseHandlerWithClient {
 	/**
 	 * Initialize the executor
 	 *
@@ -33,20 +34,38 @@ final class Handler extends BaseHandler {
 	 * @throws RuntimeException
 	 */
 	public function run(Runtime $runtime): Task {
-		// TODO: your logic goes into closure and should return TaskResult as response
-		$taskFn = static function (): TaskResult {
-			return TaskResult::none();
+		$this->manticoreClient->setPath($this->payload->path);
+
+		$taskFn = static function (Payload $payload, Client $manticoreClient): TaskResult {
+			$query = "desc {$payload->table}";
+			/** @var array{error?:string} */
+			$descResult = $manticoreClient->sendRequest($query)->getResult();
+			if (isset($descResult['error'])) {
+				return TaskResult::withError($descResult['error']);
+			}
+
+			/** @var array<array{data:array<array{Field:string,Type:string}>}> $descResult */
+			$values = [];
+			foreach ($descResult[0]['data'] as $n => ['Field' => $field, 'Type' => $type]) {
+				$values[] = match ($type) {
+					'mva64' => '(' . trim((string)$payload->values[$n], "'") . ')',
+					default => $payload->values[$n],
+				};
+			}
+
+			$queryValues = implode(', ', $values);
+			$query = "INSERT INTO `{$payload->table}` VALUES ($queryValues)";
+
+			$insertResult = $manticoreClient->sendRequest($query)->getResult();
+			/** @var array{error?:string} $insertResult */
+			if (isset($insertResult['error'])) {
+				return TaskResult::withError($insertResult['error']);
+			}
+			return TaskResult::raw($insertResult);
 		};
 
 		return Task::createInRuntime(
-			$runtime, $taskFn, []
+			$runtime, $taskFn, [$this->payload, $this->manticoreClient]
 		)->run();
-	}
-
-	/**
-	 * @return array<string>
-	 */
-	public function getProps(): array {
-		return [];
 	}
 }
