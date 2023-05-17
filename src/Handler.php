@@ -35,8 +35,11 @@ final class Handler extends BaseHandlerWithClient {
 	 */
 	public function run(Runtime $runtime): Task {
 		$this->manticoreClient->setPath($this->payload->path);
-
-		$taskFn = static function (Payload $payload, Client $manticoreClient): TaskResult {
+		// We may have seg fault so to avoid it we do encode decode trick to reduce memory footprint
+		// for threaded function that runs in parallel
+		$encodedPayload = gzencode(serialize($this->payload), 6);
+		$taskFn = static function (string $encodedPayload, Client $manticoreClient): TaskResult {
+			$payload = unserialize(gzdecode($encodedPayload));
 			$query = "desc {$payload->table}";
 			/** @var array{error?:string} */
 			$descResult = $manticoreClient->sendRequest($query)->getResult();
@@ -44,28 +47,39 @@ final class Handler extends BaseHandlerWithClient {
 				return TaskResult::withError($descResult['error']);
 			}
 
+			$columnCount = sizeof($descResult[0]['data']);
+			$columnFnMap = [];
 			/** @var array<array{data:array<array{Field:string,Type:string}>}> $descResult */
-			$values = [];
 			foreach ($descResult[0]['data'] as $n => ['Field' => $field, 'Type' => $type]) {
-				$values[] = match ($type) {
-					'mva', 'mva64' => '(' . trim((string)$payload->values[$n], "'") . ')',
-					default => $payload->values[$n],
+				$columnFnMap[$n] = match ($type) {
+					'mva', 'mva64' => function ($v) { return '(' . trim((string)$v, "'") . ')'; },
+					default => function ($v) { return $v; },
 				};
 			}
 
-			$queryValues = implode(', ', $values);
-			$query = "INSERT INTO `{$payload->table}` VALUES ($queryValues)";
-
+			$query = "INSERT INTO `{$payload->table}` VALUES ";
+			$total = (int)(sizeof($payload->values) / $columnCount);
+			for ($i = 0; $i < $total; $i++) {
+				$values = [];
+				foreach ($columnFnMap as $n => $fn) {
+					$pos = $i * $columnCount + $n;
+					$values[] = $fn($payload->values[$pos]);
+				}
+				$queryValues = implode(', ', $values);
+				$query .= "($queryValues),";
+			}
+			$query = trim($query, ', ');
 			$insertResult = $manticoreClient->sendRequest($query)->getResult();
 			/** @var array{error?:string} $insertResult */
 			if (isset($insertResult['error'])) {
 				return TaskResult::withError($insertResult['error']);
 			}
+
 			return TaskResult::raw($insertResult);
 		};
 
 		return Task::createInRuntime(
-			$runtime, $taskFn, [$this->payload, $this->manticoreClient]
+			$runtime, $taskFn, [$encodedPayload, $this->manticoreClient]
 		)->run();
 	}
 }

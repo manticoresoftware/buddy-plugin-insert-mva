@@ -35,7 +35,7 @@ final class Payload extends BasePayload {
 	public static function fromRequest(Request $request): static {
 		$self = new static();
 		$self->path = $request->path;
-		preg_match('/^insert\s+into\s+`?([^ ]+?)`?\s+values/ius', $request->payload, $matches);
+		preg_match('/^insert\s+into\s+`?([^ ]+?)`?(?:\s+\(([^)]+)\))?\s+values/ius', $request->payload, $matches);
 		$table = $matches[1] ?? null;
 		if (!$table) {
 			throw QueryParseError::create('Failed to parse table from the query');
@@ -51,7 +51,7 @@ final class Payload extends BasePayload {
 		}
 
 		$values = $matches[1];
-		$pattern = "/'(?:\\\\.|[^\\\\'])*'|\d+/i";
+		$pattern = "/'(?:\\\\.|[^\\\\'])*'|\d+(?:\.\d+)?|\{(?:[^{}]|\{[^{}]*\})*\}/i";
 		preg_match_all($pattern, $values, $matches);
 
 		$self->values = array_map(trim(...), $matches[0] ?? []);
