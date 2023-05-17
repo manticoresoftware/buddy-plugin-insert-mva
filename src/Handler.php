@@ -48,7 +48,7 @@ final class Handler extends BaseHandlerWithClient {
 			$values = [];
 			foreach ($descResult[0]['data'] as $n => ['Field' => $field, 'Type' => $type]) {
 				$values[] = match ($type) {
-					'mva64' => '(' . trim((string)$payload->values[$n], "'") . ')',
+					'mva', 'mva64' => '(' . trim((string)$payload->values[$n], "'") . ')',
 					default => $payload->values[$n],
 				};
 			}
