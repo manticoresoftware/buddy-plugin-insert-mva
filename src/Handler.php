@@ -39,8 +39,10 @@ final class Handler extends BaseHandlerWithClient {
 		// for threaded function that runs in parallel
 		$encodedPayload = gzencode(serialize($this->payload), 6);
 		$taskFn = static function (string $args): TaskResult {
+			// @phpstan-ignore-next-line
 			[$payload, $manticoreClient] = unserialize($args);
 			/** @var Client $manticoreClient */
+			// @phpstan-ignore-next-line
 			$payload = unserialize(gzdecode($payload));
 			/** @var Payload $payload */
 			$query = "desc {$payload->table}";
@@ -49,15 +51,17 @@ final class Handler extends BaseHandlerWithClient {
 			if (isset($descResult['error'])) {
 				return TaskResult::withError($descResult['error']);
 			}
-
+			/** @var array<array{data:array<array{Field:string,Type:string}>}> $descResult */
 			$columnCount = sizeof($descResult[0]['data']);
 			$columnFnMap = [];
-			/** @var array<array{data:array<array{Field:string,Type:string}>}> $descResult */
-			var_dump($descResult[0]['data']);
 			foreach ($descResult[0]['data'] as $n => ['Field' => $field, 'Type' => $type]) {
 				$columnFnMap[$n] = match ($type) {
-					'mva', 'mva64' => function ($v) { return '(' . trim((string)$v, "'") . ')'; },
-					default => function ($v) { return $v; },
+					'mva', 'mva64' => function ($v) {
+						return '(' . trim((string)$v, "'") . ')';
+					},
+					default => function ($v) {
+						return $v;
+					},
 				};
 			}
 
