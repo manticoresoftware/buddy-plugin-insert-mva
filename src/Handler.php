@@ -38,8 +38,11 @@ final class Handler extends BaseHandlerWithClient {
 		// We may have seg fault so to avoid it we do encode decode trick to reduce memory footprint
 		// for threaded function that runs in parallel
 		$encodedPayload = gzencode(serialize($this->payload), 6);
-		$taskFn = static function (string $encodedPayload, Client $manticoreClient): TaskResult {
-			$payload = unserialize(gzdecode($encodedPayload));
+		$taskFn = static function (string $args): TaskResult {
+			[$payload, $manticoreClient] = unserialize($args);
+			/** @var Client $manticoreClient */
+			$payload = unserialize(gzdecode($payload));
+			/** @var Payload $payload */
 			$query = "desc {$payload->table}";
 			/** @var array{error?:string} */
 			$descResult = $manticoreClient->sendRequest($query)->getResult();
@@ -50,6 +53,7 @@ final class Handler extends BaseHandlerWithClient {
 			$columnCount = sizeof($descResult[0]['data']);
 			$columnFnMap = [];
 			/** @var array<array{data:array<array{Field:string,Type:string}>}> $descResult */
+			var_dump($descResult[0]['data']);
 			foreach ($descResult[0]['data'] as $n => ['Field' => $field, 'Type' => $type]) {
 				$columnFnMap[$n] = match ($type) {
 					'mva', 'mva64' => function ($v) { return '(' . trim((string)$v, "'") . ')'; },
@@ -79,7 +83,7 @@ final class Handler extends BaseHandlerWithClient {
 		};
 
 		return Task::createInRuntime(
-			$runtime, $taskFn, [$encodedPayload, $this->manticoreClient]
+			$runtime, $taskFn, [serialize([$encodedPayload, $this->manticoreClient])]
 		)->run();
 	}
 }
