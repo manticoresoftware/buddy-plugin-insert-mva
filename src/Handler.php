@@ -15,7 +15,6 @@ use Manticoresearch\Buddy\Core\Plugin\BaseHandlerWithClient;
 use Manticoresearch\Buddy\Core\Task\Task;
 use Manticoresearch\Buddy\Core\Task\TaskResult;
 use RuntimeException;
-use parallel\Runtime;
 
 final class Handler extends BaseHandlerWithClient {
 	/**
@@ -33,14 +32,12 @@ final class Handler extends BaseHandlerWithClient {
 	 * @return Task
 	 * @throws RuntimeException
 	 */
-	public function run(Runtime $runtime): Task {
+	public function run(): Task {
 		$this->manticoreClient->setPath($this->payload->path);
 		// We may have seg fault so to avoid it we do encode decode trick to reduce memory footprint
 		// for threaded function that runs in parallel
 		$encodedPayload = gzencode(serialize($this->payload), 6);
-		$taskFn = static function (string $args): TaskResult {
-			// @phpstan-ignore-next-line
-			[$payload, $manticoreClient] = unserialize($args);
+		$taskFn = static function (string $payload, Client $manticoreClient): TaskResult {
 			/** @var Client $manticoreClient */
 			// @phpstan-ignore-next-line
 			$payload = unserialize(gzdecode($payload));
@@ -86,8 +83,8 @@ final class Handler extends BaseHandlerWithClient {
 			return TaskResult::raw($insertResult);
 		};
 
-		return Task::createInRuntime(
-			$runtime, $taskFn, [serialize([$encodedPayload, $this->manticoreClient])]
+		return Task::create(
+			$taskFn, [$encodedPayload, $this->manticoreClient]
 		)->run();
 	}
 }
