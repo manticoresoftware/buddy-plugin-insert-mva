@@ -33,7 +33,6 @@ final class Handler extends BaseHandlerWithClient {
 	 * @throws RuntimeException
 	 */
 	public function run(): Task {
-		$this->manticoreClient->setPath($this->payload->path);
 		// We may have seg fault so to avoid it we do encode decode trick to reduce memory footprint
 		// for threaded function that runs in parallel
 		$encodedPayload = gzencode(serialize($this->payload), 6);
@@ -44,7 +43,7 @@ final class Handler extends BaseHandlerWithClient {
 			/** @var Payload $payload */
 			$query = "desc {$payload->table}";
 			/** @var array{error?:string} */
-			$descResult = $manticoreClient->sendRequest($query)->getResult();
+			$descResult = $manticoreClient->sendRequest($query, $payload->path)->getResult();
 			if (isset($descResult['error'])) {
 				return TaskResult::withError($descResult['error']);
 			}
@@ -74,7 +73,7 @@ final class Handler extends BaseHandlerWithClient {
 				$query .= "($queryValues),";
 			}
 			$query = trim($query, ', ');
-			$insertResult = $manticoreClient->sendRequest($query)->getResult();
+			$insertResult = $manticoreClient->sendRequest($query, $payload->path)->getResult();
 			/** @var array{error?:string} $insertResult */
 			if (isset($insertResult['error'])) {
 				return TaskResult::withError($insertResult['error']);
