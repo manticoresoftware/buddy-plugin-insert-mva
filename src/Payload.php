@@ -51,7 +51,7 @@ final class Payload extends BasePayload {
 		}
 
 		$values = $matches[1];
-		$pattern = "/'(?:\\\\.|[^\\\\'])*'|\d+(?:\.\d+)?|\{(?:[^{}]|\{[^{}]*\})*\}/i";
+		$pattern = "/'(?:[^'\\\\]*(?:\\\\.[^'\\\\]*)*)'|\\d+(?:\\.\\d+)?|\\{(?:[^{}]|\\{[^{}]*\\})*\\}/";
 		preg_match_all($pattern, $values, $matches);
 
 		$self->values = array_map(trim(...), $matches[0] ?? []);
